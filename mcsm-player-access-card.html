@@ -8,12 +8,12 @@
     SPDX-License-Identifier: MIT
     Copyright (c) 2026 qch7
 
-    MCSManager Player Access Card 1.3.0 — 2026-10-23
+    MCSManager Player Access Card 1.3.1 — 2026-10-23
     Target: MCSManager v10.21.2; Minecraft Java / Fabric 26.3.
     Import as an 扩展页面卡片 (HTML extension card), then save and refresh.
     No bundled dependencies, API keys, automatic server restarts,
     or direct writes to Minecraft data files. Player avatars are loaded
-    from Crafatar using public UUIDs, without panel credentials or referrers.
+    from MCHeads / Minotar using public UUIDs, without panel credentials or referrers.
     Uses the logged-in user's existing permissions through window.$axios.
     Source contracts:
     https://github.com/MCSManager/MCSManager/blob/v10.21.2/frontend/src/tools/sandbox.ts
@@ -178,6 +178,11 @@
   const controllers = new Set();
   const waits = new Map();
   const failedAvatars = new Set();
+  const avatarProviders = new Map();
+  const AVATAR_SOURCES = [
+    { name: "MCHeads", url: (uuid) => "https://mc-heads.net/avatar/" + uuid + "/56" },
+    { name: "Minotar", url: (uuid) => "https://minotar.net/helm/" + uuid + "/56.png" }
+  ];
   let contextWatch = null;
   let themeObserver = null;
   let colorScheme = null;
@@ -291,9 +296,26 @@
     image.decoding = "async";
     image.referrerPolicy = "no-referrer";
     image.crossOrigin = "anonymous";
-    image.addEventListener("load", () => { failedAvatars.delete(key); image.dataset.loaded = "true"; }, { once: true });
-    image.addEventListener("error", () => { failedAvatars.add(key); image.remove(); }, { once: true });
-    image.src = "https://crafatar.com/avatars/" + key + "?size=56&overlay";
+    const preferred = avatarProviders.get(key);
+    const sources = preferred ? [preferred].concat(AVATAR_SOURCES.filter((source) => source !== preferred)) : AVATAR_SOURCES;
+    let sourceIndex = 0;
+    function nextSource() {
+      if (sourceIndex === sources.length) {
+        failedAvatars.add(key); avatarProviders.delete(key);
+        image.removeEventListener("error", nextSource); image.remove();
+        return;
+      }
+      const source = sources[sourceIndex++];
+      image.dataset.provider = source.name;
+      image.src = source.url(key);
+    }
+    image.addEventListener("load", () => {
+      failedAvatars.delete(key); avatarProviders.set(key, sources[sourceIndex - 1]);
+      image.dataset.loaded = "true";
+      image.removeEventListener("error", nextSource);
+    }, { once: true });
+    image.addEventListener("error", nextSource);
+    nextSource();
     avatar.appendChild(image);
     return avatar;
   }
@@ -419,6 +441,7 @@
   async function refresh(context) {
     if (!current(context) || state.busy) return;
     failedAvatars.clear();
+    avatarProviders.clear();
     state.busy = true;
     state.errors = {};
     state.instance = null; state.lists = emptyLists(); state.properties = null; state.lastRead = null;
