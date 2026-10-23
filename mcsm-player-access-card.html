@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MCSManager · 玩家权限</title>
+  <!--
+    SPDX-License-Identifier: MIT
+    Copyright (c) 2026 qch7
+
+    MCSManager Player Access Card 1.2.0 — 2026-10-23
+    Target: MCSManager v10.21.2; Minecraft Java / Fabric 26.3.
+    Import as an 扩展页面卡片 (HTML extension card), then save and refresh.
+    No dependencies, API keys, external requests, automatic server restarts,
+    or direct writes to Minecraft data files.
+    Uses the logged-in user's existing permissions through window.$axios.
+    Source contracts:
+    https://github.com/MCSManager/MCSManager/blob/v10.21.2/frontend/src/tools/sandbox.ts
+    https://github.com/MCSManager/MCSManager/blob/v10.21.2/frontend/src/services/apis/instance.ts
+    https://github.com/MCSManager/MCSManager/blob/v10.21.2/panel/src/app/routers/instance_operate_router.ts
+  -->
+  <style>
+    .mcsm-ac-v1{--ac-bg:var(--background-color-white,#fff);--ac-surface:var(--color-gray-2,#fafafa);--ac-line:var(--color-gray-4,#f0f0f0);--ac-border:var(--color-gray-5,#d9d9d9);--ac-fg:var(--color-gray-10,#262626);--ac-muted:var(--color-gray-7,#8c8c8c);--ac-accent:var(--color-blue-6,#1677ff);--ac-soft:var(--color-blue-1,#e6f4ff);--ac-good:var(--color-green-7,#389e0d);--ac-warn:var(--color-orange-7,#d46b08);--ac-danger:var(--color-red-6,#f5222d);box-sizing:border-box;container:mcsm-access / inline-size;width:100%;min-width:0;margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;color:var(--ac-fg);color-scheme:light}
+    .mcsm-ac-v1[data-theme="dark"]{--ac-bg:var(--background-color-white,#202020);--ac-surface:var(--color-gray-4,#262626);--ac-line:var(--color-gray-4,#303030);--ac-border:var(--color-gray-5,#434343);--ac-fg:var(--color-gray-10,#f0f0f0);--ac-muted:var(--color-gray-7,#8c8c8c);--ac-accent:var(--color-blue-7,#3c89e8);--ac-soft:var(--color-blue-1,#111a2c);--ac-good:var(--color-green-7,#6abe39);--ac-warn:var(--color-orange-7,#e89a3c);--ac-danger:var(--color-red-7,#e84749);color-scheme:dark}
+    .mcsm-ac-v1[data-standalone="true"]{padding:16px;background:var(--ac-bg)}
+    .mcsm-ac-v1 *{box-sizing:border-box}
+    .mcsm-ac-v1 [hidden]{display:none!important}
+    .mcsm-ac-v1 .ac-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+    .mcsm-ac-v1 button,.mcsm-ac-v1 input{font:inherit}
+    .mcsm-ac-v1 button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;margin:0;padding:4px 12px;border:1px solid var(--ac-border);border-radius:6px;background:transparent;color:var(--ac-fg);line-height:1.5;cursor:pointer;white-space:nowrap;transition:color .16s,border-color .16s,background .16s}
+    .mcsm-ac-v1 button:hover:not(:disabled){color:var(--ac-accent);border-color:var(--ac-accent)}
+    .mcsm-ac-v1 button:disabled{opacity:.4;cursor:not-allowed}
+    .mcsm-ac-v1 button:focus-visible,.mcsm-ac-v1 input:focus-visible{outline:2px solid var(--ac-accent);outline-offset:3px}
+    .mcsm-ac-v1 svg{display:block;width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+    .mcsm-ac-v1 .ac-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0 16px;border-bottom:1px solid var(--ac-line);margin-bottom:16px}
+    .mcsm-ac-v1 .ac-tabs{display:flex;align-self:stretch;gap:24px;min-width:0}
+    .mcsm-ac-v1 .ac-tab{position:relative;gap:6px;padding:0 0 12px;min-height:40px;border:0;border-radius:0;color:var(--ac-muted)}
+    .mcsm-ac-v1 .ac-tab[aria-selected="true"]{color:var(--ac-accent);font-weight:500}
+    .mcsm-ac-v1 .ac-tab[aria-selected="true"]::after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--ac-accent);border-radius:2px}
+    .mcsm-ac-v1 .ac-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:18px;padding:0 5px;border-radius:4px;background:var(--ac-surface);color:var(--ac-muted);font-size:11px;font-weight:400;font-variant-numeric:tabular-nums}
+    .mcsm-ac-v1 .ac-tools{display:flex;align-items:center;gap:12px;padding-bottom:10px;margin-left:auto}
+    .mcsm-ac-v1 .ac-state-line{display:flex;align-items:center;gap:8px;min-height:28px;color:var(--ac-muted);font-size:12px;white-space:nowrap}
+    .mcsm-ac-v1 .ac-state-label{display:inline-flex;align-items:center;gap:6px}
+    .mcsm-ac-v1 .ac-state-label::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--ac-muted)}
+    .mcsm-ac-v1 .ac-state-label[data-enabled="true"]::before{background:var(--ac-good)}
+    .mcsm-ac-v1 .ac-switch{position:relative;display:block;width:28px;min-height:16px;height:16px;padding:0;border:0;border-radius:16px;background:var(--ac-muted)}
+    .mcsm-ac-v1 .ac-switch::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0002;transition:transform .16s}
+    .mcsm-ac-v1 .ac-switch[aria-checked="true"]{background:var(--ac-accent)}
+    .mcsm-ac-v1 .ac-switch[aria-checked="true"]::after{transform:translateX(12px)}
+    .mcsm-ac-v1 .ac-icon-button{width:28px;min-height:28px;padding:5px;border-color:transparent;color:var(--ac-muted)}
+    .mcsm-ac-v1 .ac-icon-button:hover:not(:disabled),.mcsm-ac-v1 .ac-icon-button[aria-expanded="true"]{border-color:transparent;background:var(--ac-surface);color:var(--ac-accent)}
+    .mcsm-ac-v1[aria-busy="true"] [data-action="refresh"] svg{animation:ac-refresh-spin 1s linear infinite}
+    .mcsm-ac-v1 .ac-form{display:flex;align-items:center;gap:8px;margin:0 0 16px}
+    .mcsm-ac-v1 .ac-field{display:flex;flex:1;min-width:0;flex-direction:column;gap:6px;color:var(--ac-muted);font-size:12px}
+    .mcsm-ac-v1 input[type="text"],.mcsm-ac-v1 input[type="search"]{width:100%;min-width:0;height:34px;padding:5px 11px;border:1px solid var(--ac-border);border-radius:6px;background:transparent;color:var(--ac-fg);font-size:14px;line-height:22px;transition:border-color .16s}
+    .mcsm-ac-v1 input::placeholder{color:var(--ac-muted);opacity:.8}
+    .mcsm-ac-v1 input:hover:not(:disabled){border-color:var(--ac-accent)}
+    .mcsm-ac-v1 input:disabled{cursor:not-allowed;opacity:.45}
+    .mcsm-ac-v1 .ac-primary{height:34px;background:var(--ac-accent);border-color:var(--ac-accent);color:#fff}
+    .mcsm-ac-v1 .ac-primary:hover:not(:disabled){color:#fff;filter:brightness(1.1)}
+    .mcsm-ac-v1 .ac-primary[data-ban="true"]{background:var(--ac-danger);border-color:var(--ac-danger)}
+    .mcsm-ac-v1 .ac-search{position:relative;margin:-4px 0 12px}
+    .mcsm-ac-v1 .ac-search svg{position:absolute;left:10px;top:9px;color:var(--ac-muted)}
+    .mcsm-ac-v1 .ac-search input{padding-left:34px}
+    .mcsm-ac-v1 .ac-notice{padding:8px 10px;margin:0 0 12px;border-radius:4px;background:var(--ac-soft);color:var(--ac-accent);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+    .mcsm-ac-v1 .ac-notice[data-tone="success"]{background:transparent;color:var(--ac-good);padding:0;margin-bottom:10px}
+    .mcsm-ac-v1 .ac-notice[data-tone="warning"]{background:var(--ac-surface);color:var(--ac-warn)}
+    .mcsm-ac-v1 .ac-notice[data-tone="error"]{background:var(--ac-surface);color:var(--ac-danger)}
+    .mcsm-ac-v1 .ac-table-box{max-height:320px;overflow:auto;scrollbar-width:thin}
+    .mcsm-ac-v1 table{width:100%;border-collapse:collapse;table-layout:fixed;text-align:left;font-size:13px}
+    .mcsm-ac-v1 th{position:sticky;top:0;z-index:1;height:32px;padding:5px 12px;background:var(--ac-bg);border-bottom:1px solid var(--ac-line);color:var(--ac-muted);font-size:12px;font-weight:400;white-space:nowrap}
+    .mcsm-ac-v1 td{height:52px;padding:8px 12px;border-bottom:1px solid var(--ac-line);vertical-align:middle}
+    .mcsm-ac-v1 th:first-child,.mcsm-ac-v1 td:first-child{padding-left:0}
+    .mcsm-ac-v1 th:last-child,.mcsm-ac-v1 td:last-child{padding-right:0}
+    .mcsm-ac-v1 tbody tr:hover{background:var(--ac-surface)}
+    .mcsm-ac-v1 .ac-identity{display:flex;align-items:center;gap:10px;min-width:0}
+    .mcsm-ac-v1 .ac-avatar{display:flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;border:1px solid var(--ac-line);border-radius:6px;background:var(--ac-surface);color:var(--ac-muted);font:500 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace;user-select:none}
+    .mcsm-ac-v1 .ac-player-info{min-width:0}
+    .mcsm-ac-v1 .ac-player{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+    .mcsm-ac-v1 .ac-ban-reason{margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ac-muted);font-size:12px}
+    .mcsm-ac-v1 .ac-uuid{display:none;margin-top:2px;overflow-wrap:anywhere;color:var(--ac-muted);font:10px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace}
+    .mcsm-ac-v1[data-show-uuid="true"] .ac-uuid{display:block}
+    .mcsm-ac-v1 .ac-level{width:64px;text-align:center}
+    .mcsm-ac-v1 .ac-level-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:4px;background:var(--ac-surface);color:var(--ac-muted);font-size:12px;font-variant-numeric:tabular-nums}
+    .mcsm-ac-v1 [data-ui="level-heading"][data-kind="bans"]{width:76px}
+    .mcsm-ac-v1 .ac-expiry{width:76px;text-align:center;color:var(--ac-muted);font-size:11px;white-space:nowrap}
+    .mcsm-ac-v1 .ac-actions{width:76px;text-align:right}
+    .mcsm-ac-v1 .ac-danger{min-height:28px;padding:3px 6px;border-color:transparent;color:var(--ac-muted);font-size:12px}
+    .mcsm-ac-v1 .ac-danger:hover:not(:disabled){border-color:transparent;background:var(--ac-surface);color:var(--ac-danger)}
+    .mcsm-ac-v1 .ac-empty{height:120px;text-align:center;color:var(--ac-muted);font-size:12px}
+    .mcsm-ac-v1 .ac-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:10px}
+    .mcsm-ac-v1 .ac-footer{min-width:0;margin:0;color:var(--ac-muted);font-size:11px;font-variant-numeric:tabular-nums}
+    .mcsm-ac-v1 .ac-settings-button{gap:4px;min-height:24px;padding:2px 0;border:0;color:var(--ac-muted);font-size:12px}
+    .mcsm-ac-v1 .ac-settings-button svg{width:13px;height:13px}
+    .mcsm-ac-v1 .ac-help{margin-top:12px;padding-top:12px;border-top:1px solid var(--ac-line);color:var(--ac-muted);font-size:12px}
+    .mcsm-ac-v1 .ac-help p{margin:10px 0 0;line-height:1.7}
+    .mcsm-ac-v1 .ac-check{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+    .mcsm-ac-v1 .ac-check input{margin:0;accent-color:var(--ac-accent)}
+    .mcsm-ac-v1 .ac-path-form{display:flex;align-items:end;gap:8px;margin-top:12px}
+    .mcsm-ac-v1 .ac-path-form button{height:34px}
+    .mcsm-ac-v1 code{padding:1px 4px;border-radius:3px;background:var(--ac-surface);color:var(--ac-fg);font:11px ui-monospace,SFMono-Regular,Consolas,monospace}
+    @container mcsm-access (max-width:480px){.mcsm-ac-v1 .ac-head{gap:0 12px}.mcsm-ac-v1 .ac-tabs{gap:18px}.mcsm-ac-v1 .ac-tools{gap:8px}.mcsm-ac-v1 .ac-state-line{gap:6px}.mcsm-ac-v1 th,.mcsm-ac-v1 td{padding-left:8px;padding-right:8px}.mcsm-ac-v1 .ac-level{width:44px}.mcsm-ac-v1 .ac-actions{width:64px}}
+    @container mcsm-access (max-width:480px){.mcsm-ac-v1 .ac-head{align-items:center;row-gap:6px}.mcsm-ac-v1[data-kind="whitelist"] .ac-tabs,.mcsm-ac-v1[data-kind="ops"] .ac-tabs{width:100%}.mcsm-ac-v1[data-kind="whitelist"] .ac-tools,.mcsm-ac-v1[data-kind="ops"] .ac-tools{width:100%;justify-content:flex-end;padding:8px 0}.mcsm-ac-v1[data-kind="whitelist"] .ac-state-line,.mcsm-ac-v1[data-kind="ops"] .ac-state-line{margin-right:auto}}
+    @container mcsm-access (max-width:600px){.mcsm-ac-v1 .ac-form[data-kind="bans"]{flex-wrap:wrap}.mcsm-ac-v1 .ac-reason-field{order:3;flex:1 0 100%}}
+    @keyframes ac-refresh-spin{to{transform:rotate(360deg)}}
+    @media(prefers-reduced-motion:reduce){.mcsm-ac-v1 *,.mcsm-ac-v1 *::after{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+<section class="mcsm-ac-v1" data-mcsm-access-card="1" aria-label="Minecraft 玩家权限">
+  <header class="ac-head">
+    <nav class="ac-tabs" role="tablist" aria-label="名单类型">
+      <button type="button" class="ac-tab" role="tab" aria-selected="true" tabindex="0" data-action="tab-whitelist">白名单 <span class="ac-count" data-ui="count-whitelist">—</span></button>
+      <button type="button" class="ac-tab" role="tab" aria-selected="false" tabindex="-1" data-action="tab-ops">OP <span class="ac-count" data-ui="count-ops">—</span></button>
+      <button type="button" class="ac-tab" role="tab" aria-selected="false" tabindex="-1" data-action="tab-bans">黑名单 <span class="ac-count" data-ui="count-bans">—</span></button>
+    </nav>
+    <div class="ac-tools">
+      <div class="ac-state-line" data-ui="whitelist-state" title="白名单入服限制">
+        <span class="ac-state-label" data-ui="enabled">未读取</span>
+        <button type="button" class="ac-switch" role="switch" aria-checked="false" aria-label="白名单入服限制" data-action="toggle-whitelist" disabled></button>
+      </div>
+      <div class="ac-state-line" data-ui="ops-state" hidden><span data-ui="op-level">默认等级 —</span></div>
+      <button type="button" class="ac-icon-button" data-action="search" aria-label="搜索名单" title="搜索名单" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg></button>
+      <button type="button" class="ac-icon-button" data-action="refresh" aria-label="刷新名单" title="刷新名单" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/></svg></button>
+    </div>
+  </header>
+  <form class="ac-form" data-ui="add-form" autocomplete="off">
+    <label class="ac-field"><span class="ac-sr-only">玩家游戏名</span><input data-ui="name" type="text" autocomplete="off" spellcheck="false" maxlength="16" placeholder="玩家名，例如 Steve" aria-label="要添加的玩家游戏名" disabled></label>
+    <label class="ac-field ac-reason-field" data-ui="reason-field" hidden><span class="ac-sr-only">封禁原因（可选）</span><input data-ui="reason" type="text" autocomplete="off" maxlength="160" placeholder="封禁原因（可选）" aria-label="封禁原因（可选）" disabled></label>
+    <button class="ac-primary" type="submit" data-ui="add-button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-ui="add-label">添加</span></button>
+  </form>
+  <div class="ac-notice" data-ui="notice" role="status" aria-live="polite" hidden></div>
+  <label class="ac-field ac-search" data-ui="search-field" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input data-ui="search" type="search" autocomplete="off" placeholder="搜索玩家名 / UUID" aria-label="搜索当前名单"></label>
+  <div class="ac-table-box" role="tabpanel" data-ui="list-panel" aria-label="白名单">
+    <table>
+      <thead><tr><th scope="col">玩家</th><th scope="col" class="ac-level" data-ui="level-heading" hidden>等级</th><th scope="col" class="ac-actions">操作</th></tr></thead>
+      <tbody data-ui="rows"><tr><td colspan="2" class="ac-empty">等待读取</td></tr></tbody>
+    </table>
+  </div>
+  <footer class="ac-bottom">
+    <p class="ac-footer" data-ui="footnote">未连接实例</p>
+    <button class="ac-settings-button" type="button" data-action="settings" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.6 2.2-2 .9-2-.6L2.5 9l1.6 1.6v2.8L2.5 15l1.9 3.5 2-.6 2 .9L9 21h4l.6-2.2 2-.9 2 .6 1.9-3.5-1.6-1.6v-2.8L19.5 9l-1.9-3.5-2 .6-2-.9L13 3Z"/><circle cx="11" cy="12" r="3"/></svg>设置</button>
+  </footer>
+  <div class="ac-help" data-ui="help" hidden>
+    <label class="ac-check"><input type="checkbox" data-ui="show-uuid">显示 UUID</label>
+    <form class="ac-path-form" data-ui="path-form">
+      <label class="ac-field">服务端目录<input data-ui="directory" type="text" value="/" placeholder="/" aria-label="MC 服务端相对目录" disabled></label>
+      <button type="submit" data-ui="path-button" disabled>应用</button>
+    </form>
+    <p>填写实例内的相对目录，如 <code>server</code>；根目录用 <code>/</code>。按实例保存在当前浏览器。</p>
+    <p>运行时可编辑；OP 等级沿用服务端设置。移出白名单不会踢出在线玩家，OP 可绕过白名单。</p>
+    <p>黑名单使用 <code>ban / pardon</code>，封禁会踢出在线玩家；新增封禁为永久，可在列表中解除。</p>
+    <p data-ui="install-help" hidden>导入：实例控制台 → 设计模式 → 扩展页面卡片 → 上传本文件 → 保存并刷新。</p>
+  </div>
+</section>
+<script>
+(function () {
+  "use strict";
+  const candidates = document.querySelectorAll('[data-mcsm-access-card="1"]:not([data-access-ready])');
+  const root = candidates[candidates.length - 1];
+  if (!root) return;
+  root.setAttribute("data-access-ready", "1");
+  const real = window.$realWindow || window;
+  const axios = window.$axios;
+  const ui = (name) => root.querySelector('[data-ui="' + name + '"]');
+  const buttons = (action) => root.querySelector('[data-action="' + action + '"]');
+  // MCSManager binds function-valued bridge properties. The bound Axios callable
+  // does not retain static helpers such as .request; invoke it as a function.
+  const bridgeAvailable = Boolean(window.$realWindow && axios && (typeof axios === "function" || typeof axios.request === "function") && typeof window.$onMounted === "function");
+  const KINDS = ["whitelist", "ops", "bans"];
+  const LABELS = { whitelist: "白名单", ops: "OP 名单", bans: "黑名单", properties: "服务器设置" };
+  const FILES = { whitelist: "whitelist.json", ops: "ops.json", bans: "banned-players.json" };
+  const emptyLists = () => ({ whitelist: null, ops: null, bans: null });
+  const state = { context: null, generation: 0, busy: false, destroyed: false, tab: "whitelist", instance: null, lists: emptyLists(), properties: null, errors: {}, notice: "", tone: "info", lastRead: null };
+  const controllers = new Set();
+  const waits = new Map();
+  let contextWatch = null;
+  let themeObserver = null;
+  let colorScheme = null;
+  let lastRequestAt = 0;
+  const NAME = /^[A-Za-z0-9_]{1,16}$/;
+  const UUID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  const STATUS = { "-1": "忙碌", "0": "已停止", "1": "正在停止", "2": "正在启动", "3": "运行中" };
+  const ENDPOINT = { instance: "./api/instance", config: "./api/protected_instance/process_config/file", command: "./api/protected_instance/command" };
+
+  function cancelled() { const error = new Error("实例已切换或卡片已关闭"); error.name = "CardCancelled"; return error; }
+  function isCancelled(error) { return error && (error.name === "CardCancelled" || error.name === "AbortError" || error.code === "ERR_CANCELED"); }
+  function routeContext() {
+    const hash = real.location.hash || "";
+    const question = hash.indexOf("?");
+    const route = question < 0 ? hash : hash.slice(0, question);
+    if (!route.startsWith("#/instances/terminal")) return null;
+    const params = new URLSearchParams(question < 0 ? "" : hash.slice(question + 1));
+    const daemonId = params.get("daemonId");
+    const instanceId = params.get("instanceId");
+    if (!daemonId || !instanceId || !/^[A-Za-z0-9_-]{1,128}$/.test(daemonId) || !/^[A-Za-z0-9_-]{1,128}$/.test(instanceId)) return null;
+    return { daemonId: daemonId, instanceId: instanceId, key: daemonId + ":" + instanceId };
+  }
+  function current(context) {
+    const route = routeContext();
+    return !state.destroyed && root.isConnected && !!context && state.context === context && state.generation === context.generation && !!route && route.key === context.key;
+  }
+  function assertCurrent(context) { if (!current(context)) throw cancelled(); }
+  function sleep(ms) {
+    return new Promise((resolve, reject) => {
+      const id = real.setTimeout(() => { waits.delete(id); resolve(); }, ms);
+      waits.set(id, reject);
+    });
+  }
+  function cancelPending() {
+    controllers.forEach((controller) => controller.abort());
+    controllers.clear();
+    waits.forEach((reject, id) => { real.clearTimeout(id); reject(cancelled()); });
+    waits.clear();
+  }
+  function message(text, tone) { state.notice = text; state.tone = tone || "info"; renderNotice(); }
+  function errorMessage(error) {
+    const payload = error && error.response && error.response.data;
+    const detail = payload && typeof payload.data === "string" ? payload.data : error && error.message;
+    const status = error && error.response && error.response.status;
+    if (status === 401 || status === 403) return "当前登录用户无权执行此操作，或会话已过期。请检查实例权限并重新登录。";
+    if (status === 429) return "面板请求过于频繁，请稍后刷新。";
+    return String(detail || "请求失败，请检查节点连接和实例权限。").slice(0, 450);
+  }
+  async function request(context, endpoint, extra, method) {
+    assertCurrent(context);
+    const delay = 380 - (Date.now() - lastRequestAt);
+    if (delay > 0) await sleep(delay);
+    assertCurrent(context);
+    lastRequestAt = Date.now();
+    const controller = new real.AbortController();
+    controllers.add(controller);
+    try {
+      const params = Object.assign({ daemonId: context.daemonId, uuid: context.instanceId }, extra || {});
+      const config = { url: endpoint, method: method || "GET", params: params, timeout: 12000, signal: controller.signal };
+      const response = await (typeof axios === "function" ? axios(config) : axios.request(config));
+      assertCurrent(context);
+      const packet = response && response.data;
+      if (!packet || typeof packet !== "object" || Number(packet.status) !== 200 || !("data" in packet)) {
+        throw new Error(packet && typeof packet.data === "string" ? packet.data : "面板返回了无法识别的响应。");
+      }
+      return packet.data;
+    } finally { controllers.delete(controller); }
+  }
+  function normalizeDirectory(value) {
+    let directory = String(value || "").trim().replace(/\\/g, "/");
+    if (directory === "/" || directory === ".") return "";
+    if (directory.startsWith("/") || /^[A-Za-z]:/.test(directory) || /[\x00-\x1f]/.test(directory)) throw new Error("请填写实例内的相对目录，例如 server；根目录填写 /。");
+    const parts = directory.split("/").filter(Boolean);
+    if (parts.some((part) => part === "." || part === "..")) throw new Error("目录中不能使用 . 或 ..。");
+    return parts.join("/");
+  }
+  function directoryKey(context) { return "mcsm.player-access.directory.v1:" + context.key; }
+  function savedDirectory(context) {
+    try { return normalizeDirectory(real.localStorage.getItem(directoryKey(context)) || ""); } catch (_) { return ""; }
+  }
+  function fileName(context, name) { return context.directory ? context.directory + "/" + name : name; }
+  async function readList(context, kind) {
+    const data = await request(context, ENDPOINT.config, { fileName: fileName(context, FILES[kind]), type: "json" });
+    if (!Array.isArray(data) || data.some((row) => !row || typeof row !== "object" || Array.isArray(row))) throw new Error(FILES[kind] + " 不是有效的玩家数组。");
+    if (data.some((row) => !uuidKey(row.uuid))) throw new Error(FILES[kind] + " 含有缺少或无效 UUID 的条目，请先在服务端核对。");
+    return data.map((row) => ({ name: typeof row.name === "string" ? row.name : "", uuid: typeof row.uuid === "string" ? row.uuid : "", level: row.level, reason: typeof row.reason === "string" ? row.reason : "", created: typeof row.created === "string" ? row.created : "", source: typeof row.source === "string" ? row.source : "", expires: typeof row.expires === "string" ? row.expires : "" }));
+  }
+  async function readProperties(context) {
+    const data = await request(context, ENDPOINT.config, { fileName: fileName(context, "server.properties"), type: "properties" });
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("server.properties 读取结果无效。");
+    return data;
+  }
+  function booleanValue(value) {
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    return null;
+  }
+  function whitelistEnabled() { return state.properties ? booleanValue(state.properties["white-list"]) : null; }
+  function uuidKey(value) { return typeof value === "string" && UUID.test(value) ? value.toLowerCase().replace(/-/g, "") : ""; }
+  function validName(value) {
+    const name = String(value || "").trim();
+    if (!NAME.test(name)) throw new Error("玩家名只接受 1–16 位英文字母、数字和下划线，请填写游戏内名称。");
+    return name;
+  }
+  function namedRow(rows, name) {
+    const online = state.properties && booleanValue(state.properties["online-mode"]) === true;
+    return rows.find((row) => online ? row.name.toLowerCase() === name.toLowerCase() : row.name === name);
+  }
+  function banActive(row) {
+    if (!row.expires || row.expires.toLowerCase() === "forever") return true;
+    const date = row.expires.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{2})(\d{2})$/, "$1T$2$3:$4");
+    const until = Date.parse(date);
+    return !Number.isFinite(until) || until > Date.now();
+  }
+  function canEdit(kind) { return bridgeAvailable && !!state.context && !state.busy && !!state.instance && state.instance.status === 3 && Array.isArray(state.lists[kind]); }
+  function renderNotice() {
+    ui("notice").textContent = state.notice;
+    ui("notice").setAttribute("data-tone", state.tone);
+    ui("notice").hidden = !state.notice;
+  }
+  function renderRows() {
+    const rows = state.lists[state.tab];
+    const target = ui("rows");
+    target.replaceChildren();
+    const query = ui("search").value.trim().toLowerCase();
+    const filtered = Array.isArray(rows) ? rows.filter((row) => row.name.toLowerCase().includes(query) || row.uuid.toLowerCase().includes(query) || (state.tab === "bans" && row.reason.toLowerCase().includes(query))) : [];
+    if (!Array.isArray(rows) || !filtered.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.className = "ac-empty";
+      td.colSpan = state.tab === "whitelist" ? 2 : 3;
+      td.textContent = !Array.isArray(rows) ? (state.errors[state.tab] ? "读取失败，请检查设置后刷新" : "等待读取") : rows.length ? "没有匹配的玩家" : state.tab === "ops" ? "暂无 OP" : state.tab === "bans" ? "暂无封禁玩家" : "暂无玩家，添加第一位成员";
+      tr.appendChild(td); target.appendChild(tr); return;
+    }
+    filtered.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach((row) => {
+      const tr = document.createElement("tr");
+      const identity = document.createElement("td");
+      const player = document.createElement("div"); player.className = "ac-identity";
+      const avatar = document.createElement("span"); avatar.className = "ac-avatar"; avatar.textContent = row.name ? row.name.slice(0, 1).toUpperCase() : "?"; avatar.setAttribute("aria-hidden", "true");
+      const info = document.createElement("div"); info.className = "ac-player-info";
+      const name = document.createElement("div"); name.className = "ac-player"; name.textContent = row.name || "（缺少玩家名称）";
+      name.title = (row.name || "未知玩家") + " · " + row.uuid;
+      const uuid = document.createElement("div"); uuid.className = "ac-uuid"; uuid.textContent = row.uuid || "缺少 UUID";
+      info.append(name, uuid);
+      if (state.tab === "bans" && row.reason) {
+        const reason = document.createElement("div"); reason.className = "ac-ban-reason"; reason.textContent = row.reason;
+        reason.title = row.reason + (row.source ? "\n操作者：" + row.source : "") + (row.created ? "\n封禁时间：" + row.created : "");
+        info.appendChild(reason);
+      }
+      player.append(avatar, info); identity.appendChild(player); tr.appendChild(identity);
+      if (state.tab === "ops") {
+        const level = document.createElement("td"); level.className = "ac-level";
+        const badge = document.createElement("span"); badge.className = "ac-level-badge";
+        badge.textContent = Number.isInteger(row.level) && row.level >= 0 && row.level <= 4 ? String(row.level) : "—";
+        level.appendChild(badge);
+        tr.appendChild(level);
+      } else if (state.tab === "bans") {
+        const expiry = document.createElement("td"); expiry.className = "ac-expiry";
+        expiry.textContent = !banActive(row) ? "已到期" : row.expires.toLowerCase() === "forever" ? "永久" : /^\d{4}-\d{2}-\d{2}/.test(row.expires) ? row.expires.slice(5, 10).replace("-", "/") : "—";
+        expiry.title = row.expires ? row.expires.toLowerCase() === "forever" ? "永久封禁" : "到期：" + row.expires : "服务端未提供期限";
+        tr.appendChild(expiry);
+      }
+      const action = document.createElement("td"); action.className = "ac-actions";
+      const button = document.createElement("button"); button.type = "button"; button.className = "ac-danger";
+      button.dataset.action = "remove"; button.dataset.kind = state.tab; button.dataset.name = row.name; button.dataset.uuid = row.uuid;
+      button.textContent = state.tab === "ops" ? "撤销" : state.tab === "bans" ? "解封" : "移出";
+      button.disabled = !canEdit(state.tab) || !NAME.test(row.name) || !uuidKey(row.uuid);
+      button.setAttribute("aria-label", (state.tab === "ops" ? "撤销 OP：" : state.tab === "bans" ? "解除封禁：" : "移出白名单：") + (row.name || row.uuid));
+      if (!NAME.test(row.name) || !uuidKey(row.uuid)) button.title = "条目缺少有效名称或 UUID，请检查服务端文件。";
+      action.appendChild(button); tr.appendChild(action); target.appendChild(tr);
+    });
+  }
+  function render() {
+    const instance = state.instance;
+    const context = state.context;
+    root.setAttribute("aria-busy", state.busy ? "true" : "false");
+    root.dataset.kind = state.tab;
+    const nickname = instance && instance.config && instance.config.nickname;
+    root.title = context ? (nickname || "当前实例") + " · " + (instance ? STATUS[String(instance.status)] || "状态未知" : "读取中") + " · " + context.instanceId.slice(0, 8) : "Minecraft 玩家权限";
+    buttons("refresh").disabled = !context || state.busy || !bridgeAvailable;
+    buttons("refresh").setAttribute("aria-label", state.busy ? "正在处理" : "刷新名单");
+    KINDS.forEach((kind) => {
+      buttons("tab-" + kind).setAttribute("aria-selected", state.tab === kind ? "true" : "false");
+      buttons("tab-" + kind).tabIndex = state.tab === kind ? 0 : -1;
+      ui("count-" + kind).textContent = Array.isArray(state.lists[kind]) ? String(state.lists[kind].length) : "—";
+    });
+    ui("list-panel").setAttribute("aria-labelledby", buttons("tab-" + state.tab).id);
+    ui("list-panel").setAttribute("aria-label", LABELS[state.tab]);
+    ui("whitelist-state").hidden = state.tab !== "whitelist";
+    ui("ops-state").hidden = state.tab !== "ops";
+    ui("level-heading").hidden = state.tab === "whitelist";
+    ui("level-heading").dataset.kind = state.tab;
+    ui("level-heading").textContent = state.tab === "bans" ? "期限" : "等级";
+    const enabled = whitelistEnabled();
+    ui("enabled").textContent = enabled === null ? "未读取" : enabled ? "已开启" : "已关闭";
+    ui("enabled").dataset.enabled = String(enabled);
+    const toggle = buttons("toggle-whitelist");
+    toggle.title = enabled === null ? "白名单状态未知" : enabled ? "关闭白名单" : "开启白名单";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-checked", enabled === true ? "true" : "false");
+    toggle.disabled = !bridgeAvailable || !context || state.busy || !instance || instance.status !== 3 || enabled === null;
+    const defaultLevel = state.properties && state.properties["op-permission-level"];
+    ui("op-level").textContent = "默认等级 " + (defaultLevel !== undefined && /^[0-4]$/.test(String(defaultLevel)) ? String(defaultLevel) : "—");
+    ui("add-label").textContent = state.tab === "ops" ? "授予 OP" : state.tab === "bans" ? "封禁" : "添加";
+    ui("add-button").setAttribute("aria-label", state.tab === "ops" ? "授予 OP" : state.tab === "bans" ? "封禁玩家" : "添加到白名单");
+    ui("add-button").dataset.ban = String(state.tab === "bans");
+    ui("add-form").dataset.kind = state.tab;
+    ui("reason-field").hidden = state.tab !== "bans";
+    ui("reason").disabled = state.tab !== "bans" || !canEdit("bans");
+    ui("search").placeholder = state.tab === "bans" ? "搜索玩家名 / UUID / 原因" : "搜索玩家名 / UUID";
+    ui("add-button").disabled = !canEdit(state.tab);
+    ui("name").disabled = !canEdit(state.tab);
+    ui("directory").disabled = state.busy || !context || !bridgeAvailable;
+    ui("path-button").disabled = state.busy || !context || !bridgeAvailable;
+    const stamp = state.lastRead ? "已同步 " + state.lastRead.toLocaleTimeString("zh-CN", { hour12: false }) : context ? "连接中…" : "未连接实例";
+    ui("footnote").textContent = stamp + (instance && instance.status !== 3 ? " · 仅查看" : "");
+    renderNotice(); renderRows();
+  }
+  async function refresh(context) {
+    if (!current(context) || state.busy) return;
+    state.busy = true;
+    state.errors = {};
+    state.instance = null; state.lists = emptyLists(); state.properties = null; state.lastRead = null;
+    message(""); render();
+    try {
+      state.instance = await request(context, ENDPOINT.instance);
+      if (!state.instance || !Number.isInteger(state.instance.status)) throw new Error("无法识别实例运行状态。");
+      for (const kind of KINDS) {
+        try { state.lists[kind] = await readList(context, kind); }
+        catch (error) { if (isCancelled(error)) throw error; state.errors[kind] = errorMessage(error); }
+      }
+      try { state.properties = await readProperties(context); }
+      catch (error) { if (isCancelled(error)) throw error; state.errors.properties = errorMessage(error); }
+      assertCurrent(context);
+      state.lastRead = new Date();
+      const failures = Object.keys(state.errors);
+      if (failures.length) {
+        message(failures.map((key) => LABELS[key] + "：" + state.errors[key]).join("\n") + "\n可在设置中检查服务端目录。", "warning");
+      } else if (state.instance.status !== 3) message("实例未运行，当前仅可查看。", "info");
+      else message("");
+    } catch (error) { if (current(context) && !isCancelled(error)) message(errorMessage(error), "error"); }
+    finally { if (current(context)) { state.busy = false; render(); } }
+  }
+  async function mutate(action) {
+    const context = state.context;
+    if (!current(context) || state.busy) return;
+    let commandAttempted = false;
+    let affected = action.kind;
+    try {
+      if (action.kind !== "properties" && !Array.isArray(state.lists[action.kind])) throw new Error("请先成功读取对应名单。");
+      if (action.kind !== "properties") action.name = validName(action.name);
+      if (action.kind === "bans" && action.add) {
+        action.reason = String(action.reason || "").trim();
+        if (action.reason.length > 160 || /[\x00-\x1f\x7f]/.test(action.reason)) throw new Error("封禁原因最多 160 字，不能包含换行或控制字符。");
+      }
+      state.busy = true; message("正在处理…"); render();
+      const instance = await request(context, ENDPOINT.instance);
+      state.instance = instance;
+      if (!instance || instance.status !== 3) throw new Error("实例未处于运行状态，请启动并完成加载后再操作。");
+      let verify;
+      let command;
+      if (action.kind === "properties") {
+        state.properties = await readProperties(context);
+        const before = whitelistEnabled();
+        if (before === null) throw new Error("无法确认白名单开关的当前状态。");
+        if (before === action.enabled) { message("白名单开关已经处于目标状态。", "success"); return; }
+        command = action.enabled ? "whitelist on" : "whitelist off";
+        verify = () => whitelistEnabled() === action.enabled;
+      } else {
+        const rows = await readList(context, action.kind);
+        state.lists[action.kind] = rows;
+        if (action.add) {
+          // Server-side name/UUID resolution is authoritative. Preserve typed case.
+          const existing = namedRow(rows.filter((row) => action.kind !== "bans" || banActive(row)), action.name);
+          if (existing) { message(action.name + " 已在" + LABELS[action.kind] + "中。", "success"); return; }
+          command = action.kind === "ops" ? "op " + action.name : action.kind === "bans" ? "ban " + action.name + (action.reason ? " " + action.reason : "") : "whitelist add " + action.name;
+          verify = () => Boolean(namedRow(state.lists[action.kind].filter((row) => action.kind !== "bans" || banActive(row)), action.name));
+        } else {
+          const key = uuidKey(action.uuid);
+          if (!key) throw new Error("此条目缺少有效 UUID，无法确认移除结果。");
+          const before = rows.find((row) => uuidKey(row.uuid) === key);
+          if (!before) { message("该条目已经不在名单中，列表已刷新。", "success"); return; }
+          if (before.name !== action.name) throw new Error("该玩家的名称已变化，请刷新后重新选择。");
+          if (rows.some((row) => row.name.toLowerCase() === before.name.toLowerCase() && uuidKey(row.uuid) !== key)) throw new Error("名单存在同名但不同 UUID 的条目，请先在控制台核对身份，避免修改错误玩家。");
+          command = action.kind === "ops" ? "deop " + action.name : action.kind === "bans" ? "pardon " + action.name : "whitelist remove " + action.name;
+          verify = () => !state.lists[action.kind].some((row) => uuidKey(row.uuid) === key);
+        }
+      }
+      assertCurrent(context);
+      message("正在确认结果…");
+      commandAttempted = true;
+      await request(context, ENDPOINT.command, { command: command }, "POST");
+      let confirmed = false;
+      for (const wait of [700, 1400, 2600]) {
+        await sleep(wait); assertCurrent(context);
+        if (action.kind === "properties") state.properties = await readProperties(context);
+        else state.lists[action.kind] = await readList(context, action.kind);
+        if (verify()) { confirmed = true; break; }
+      }
+      assertCurrent(context);
+      state.lastRead = new Date();
+      if (confirmed) {
+        delete state.errors[action.kind];
+        const result = action.kind === "properties" ? (action.enabled ? "已开启白名单。" : "已关闭白名单。") : action.kind === "ops" ? (action.add ? "已授予 " : "已撤销 ") + action.name + " 的 OP 权限。" : action.kind === "bans" ? (action.add ? "已封禁 " : "已解封 ") + action.name + "。" : action.name + (action.add ? " 已加入白名单。" : " 已移出白名单。");
+        message(result, "success");
+        if (action.add) ui("name").value = "";
+        if (action.add && action.kind === "bans") ui("reason").value = "";
+      } else message("命令已发送，但尚未确认目标状态。请查看当前实例控制台，检查玩家名、身份解析或命令报错，再刷新名单。", "warning");
+    } catch (error) {
+      if (current(context) && !isCancelled(error)) {
+        if (commandAttempted) {
+          if (affected === "properties") state.properties = null;
+          else { state.lists[affected] = null; state.errors[affected] = errorMessage(error); }
+          message("操作结果尚未确认，请先刷新名单并检查实例控制台。\n" + errorMessage(error), "warning");
+        } else message(errorMessage(error), "error");
+      }
+    } finally { if (current(context)) { state.busy = false; render(); } }
+  }
+  function enterContext(route, directory) {
+    cancelPending(); state.generation += 1;
+    state.busy = false; state.instance = null; state.lists = emptyLists(); state.properties = null; state.errors = {}; state.lastRead = null;
+    ui("name").value = ""; ui("search").value = ""; ui("reason").value = "";
+    if (!route) { state.context = null; message("请进入某个 MC 实例的控制台页面，再使用这张卡片。"); render(); return; }
+    state.context = Object.freeze(Object.assign({}, route, { generation: state.generation, directory: directory === undefined ? savedDirectory(route) : directory }));
+    ui("directory").value = state.context.directory || "/";
+    render(); refresh(state.context);
+  }
+  function watchContext() {
+    if (state.destroyed) return;
+    if (!root.isConnected) { destroy(); return; }
+    const route = routeContext();
+    if ((route && route.key) !== (state.context && state.context.key)) enterContext(route);
+  }
+  function handleClick(event) {
+    const button = event.target.closest && event.target.closest("button[data-action]");
+    if (!button || !root.contains(button) || button.disabled) return;
+    const action = button.dataset.action;
+    if (action === "search") {
+      const open = ui("search-field").hidden;
+      ui("search-field").hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+      if (open) ui("search").focus();
+      else { ui("search").value = ""; renderRows(); }
+    }
+    if (action === "settings") {
+      ui("help").hidden = !ui("help").hidden;
+      button.setAttribute("aria-expanded", String(!ui("help").hidden));
+    }
+    if (action === "refresh") refresh(state.context);
+    if (action.startsWith("tab-") && KINDS.includes(action.slice(4))) { state.tab = action.slice(4); ui("search").value = ""; render(); }
+    if (action === "remove") mutate({ kind: button.dataset.kind, name: button.dataset.name, uuid: button.dataset.uuid, add: false });
+    if (action === "toggle-whitelist") { const before = whitelistEnabled(); if (before !== null) mutate({ kind: "properties", enabled: !before }); }
+  }
+  function handleTabKey(event) {
+    const tab = event.target.closest && event.target.closest('[role="tab"]');
+    if (!tab || !root.contains(tab) || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    state.tab = event.key === "Home" ? KINDS[0] : event.key === "End" ? KINDS[KINDS.length - 1] : KINDS[(KINDS.indexOf(state.tab) + (event.key === "ArrowRight" ? 1 : KINDS.length - 1)) % KINDS.length];
+    ui("search").value = "";
+    render(); buttons("tab-" + state.tab).focus();
+  }
+  function showUuid() { root.dataset.showUuid = String(ui("show-uuid").checked); }
+  function syncTheme() {
+    // $theme is the bridge's initial snapshot; live ancestor classes take priority.
+    const host = root.parentElement && root.parentElement.closest(".app-dark-theme,.app-light-theme");
+    const theme = String(window.$theme === undefined ? "0" : window.$theme).toLowerCase();
+    const dark = host ? host.classList.contains("app-dark-theme") : theme === "2" || theme === "dark" || ((theme === "0" || theme === "auto") && colorScheme && colorScheme.matches);
+    root.setAttribute("data-theme", dark ? "dark" : "light");
+  }
+  function addSubmit(event) { event.preventDefault(); if (canEdit(state.tab)) mutate({ kind: state.tab, name: ui("name").value, reason: ui("reason").value, add: true }); }
+  function pathSubmit(event) {
+    event.preventDefault(); if (state.busy || !state.context) return;
+    try {
+      const directory = normalizeDirectory(ui("directory").value);
+      try { real.localStorage.setItem(directoryKey(state.context), directory); } catch (_) { /* Private browsing may disallow persistence. */ }
+      enterContext(routeContext(), directory);
+    } catch (error) { message(errorMessage(error), "error"); }
+  }
+  function destroy() {
+    if (state.destroyed) return;
+    state.destroyed = true; cancelPending();
+    if (contextWatch !== null) real.clearInterval(contextWatch);
+    if (themeObserver) themeObserver.disconnect();
+    if (colorScheme && colorScheme.removeEventListener) colorScheme.removeEventListener("change", syncTheme);
+    root.removeEventListener("click", handleClick);
+    root.removeEventListener("keydown", handleTabKey);
+    ui("show-uuid").removeEventListener("change", showUuid);
+    ui("add-form").removeEventListener("submit", addSubmit);
+    ui("path-form").removeEventListener("submit", pathSubmit);
+    ui("search").removeEventListener("input", renderRows);
+  }
+  function mount() {
+    if (root.getAttribute("data-access-mounted") === "1") return;
+    root.setAttribute("data-access-mounted", "1");
+    colorScheme = typeof real.matchMedia === "function" ? real.matchMedia("(prefers-color-scheme: dark)") : null;
+    syncTheme();
+    if (colorScheme && colorScheme.addEventListener) colorScheme.addEventListener("change", syncTheme);
+    if (typeof real.MutationObserver === "function") {
+      themeObserver = new real.MutationObserver(syncTheme);
+      for (let parent = root.parentElement; parent; parent = parent.parentElement) themeObserver.observe(parent, { attributes: true, attributeFilter: ["class"] });
+    }
+    const id = "mcsm-access-" + Math.random().toString(36).slice(2, 10);
+    ui("list-panel").id = id + "-list";
+    ui("help").id = id + "-settings";
+    ui("search-field").id = id + "-search";
+    buttons("settings").setAttribute("aria-controls", ui("help").id);
+    buttons("search").setAttribute("aria-controls", ui("search-field").id);
+    KINDS.forEach((kind) => {
+      buttons("tab-" + kind).id = id + "-" + kind;
+      buttons("tab-" + kind).setAttribute("aria-controls", ui("list-panel").id);
+    });
+    root.addEventListener("click", handleClick);
+    root.addEventListener("keydown", handleTabKey);
+    ui("show-uuid").addEventListener("change", showUuid);
+    ui("add-form").addEventListener("submit", addSubmit);
+    ui("path-form").addEventListener("submit", pathSubmit);
+    ui("search").addEventListener("input", renderRows);
+    if (!bridgeAvailable) {
+      root.dataset.standalone = "true";
+      ui("install-help").hidden = false;
+      message("请上传到 MCSManager 的扩展页面卡片。导入步骤见设置。");
+      render(); return;
+    }
+    enterContext(routeContext());
+    contextWatch = real.setInterval(watchContext, 600);
+  }
+  // v10.21.2 uses lifecycle registration functions, not property assignment.
+  if (bridgeAvailable) { window.$onMounted(mount); window.$onUnmounted(destroy); }
+  else mount();
+})();
+</script>
+</body>
+</html>

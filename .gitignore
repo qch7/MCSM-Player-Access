@@ -1,0 +1,33 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local output and temporary files
+output/
+.playwright-cli/
+node_modules/
+__pycache__/
+*.pyc
+*.log
+*.tmp
+*.bak
+
+# Local credentials and runtime data
+.env
+.env.*
+!.env.example
+private/
+*.private.*
+*.pem
+*.key
+whitelist.json
+ops.json
+banned-players.json
+banned-ips.json
+server.properties
+usercache.json
