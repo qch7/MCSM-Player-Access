@@ -8,7 +8,7 @@
     SPDX-License-Identifier: MIT
     Copyright (c) 2026 qch7
 
-    MCSManager Player Access Card 1.3.1 — 2026-10-23
+    MCSManager Player Access Card 1.4.0 — 2026-10-23
     Target: MCSManager v10.21.2; Minecraft Java / Fabric 26.3.
     Import as an 扩展页面卡片 (HTML extension card), then save and refresh.
     No bundled dependencies, API keys, automatic server restarts,
@@ -53,6 +53,14 @@
     .mcsm-ac-v1[aria-busy="true"] [data-action="refresh"] svg{animation:ac-refresh-spin 1s linear infinite}
     .mcsm-ac-v1 .ac-form{display:flex;align-items:center;gap:8px;margin:0 0 16px}
     .mcsm-ac-v1 .ac-field{display:flex;flex:1;min-width:0;flex-direction:column;gap:6px;color:var(--ac-muted);font-size:12px}
+    .mcsm-ac-v1 .ac-name-field{position:relative}
+    .mcsm-ac-v1 .ac-candidates{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;max-height:240px;overflow:auto;padding:4px;border:1px solid var(--ac-border);border-radius:6px;background:var(--ac-bg);box-shadow:0 6px 18px #0002;scrollbar-width:thin}
+    .mcsm-ac-v1 .ac-candidate{display:flex;justify-content:flex-start;gap:8px;width:100%;min-height:40px;padding:6px 8px;border:0;border-radius:4px;text-align:left;font-size:13px}
+    .mcsm-ac-v1 .ac-candidate[aria-selected="true"],.mcsm-ac-v1 .ac-candidate:hover:not(:disabled){background:var(--ac-soft);color:var(--ac-accent)}
+    .mcsm-ac-v1 .ac-candidate:disabled{opacity:1;color:var(--ac-muted)}
+    .mcsm-ac-v1 .ac-candidate-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+    .mcsm-ac-v1 .ac-candidate-tag{margin-left:auto;color:var(--ac-muted);font-size:11px}
+    .mcsm-ac-v1 .ac-candidate-note{padding:10px 8px;color:var(--ac-muted);font-size:12px}
     .mcsm-ac-v1 input[type="text"],.mcsm-ac-v1 input[type="search"]{width:100%;min-width:0;height:34px;padding:5px 11px;border:1px solid var(--ac-border);border-radius:6px;background:transparent;color:var(--ac-fg);font-size:14px;line-height:22px;transition:border-color .16s}
     .mcsm-ac-v1 input::placeholder{color:var(--ac-muted);opacity:.8}
     .mcsm-ac-v1 input:hover:not(:disabled){border-color:var(--ac-accent)}
@@ -128,7 +136,11 @@
     </div>
   </header>
   <form class="ac-form" data-ui="add-form" autocomplete="off">
-    <label class="ac-field"><span class="ac-sr-only">玩家游戏名</span><input data-ui="name" type="text" autocomplete="off" spellcheck="false" maxlength="16" placeholder="玩家名，例如 Steve" aria-label="要添加的玩家游戏名" disabled></label>
+    <div class="ac-field ac-name-field">
+      <label class="ac-sr-only" data-ui="name-label">玩家游戏名</label>
+      <input data-ui="name" type="text" autocomplete="off" spellcheck="false" maxlength="16" placeholder="玩家名，例如 Steve" aria-label="要添加的玩家游戏名" disabled>
+      <div class="ac-candidates" data-ui="op-candidates" role="listbox" aria-label="白名单玩家候选" hidden></div>
+    </div>
     <label class="ac-field ac-reason-field" data-ui="reason-field" hidden><span class="ac-sr-only">封禁原因（可选）</span><input data-ui="reason" type="text" autocomplete="off" maxlength="160" placeholder="封禁原因（可选）" aria-label="封禁原因（可选）" disabled></label>
     <button class="ac-primary" type="submit" data-ui="add-button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-ui="add-label">添加</span></button>
   </form>
@@ -175,6 +187,7 @@
   const FILES = { whitelist: "whitelist.json", ops: "ops.json", bans: "banned-players.json" };
   const emptyLists = () => ({ whitelist: null, ops: null, bans: null });
   const state = { context: null, generation: 0, busy: false, destroyed: false, tab: "whitelist", instance: null, lists: emptyLists(), properties: null, errors: {}, notice: "", tone: "info", lastRead: null };
+  const opPicker = { open: false, active: -1, selected: null, matches: [] };
   const controllers = new Set();
   const waits = new Map();
   const failedAvatars = new Set();
@@ -335,6 +348,93 @@
     return !Number.isFinite(until) || until > Date.now();
   }
   function canEdit(kind) { return bridgeAvailable && !!state.context && !state.busy && !!state.instance && state.instance.status === 3 && Array.isArray(state.lists[kind]); }
+  function restrictedOpPicker() { return state.tab === "ops" && whitelistEnabled() === true; }
+  function alreadyOp(row) {
+    const ops = state.lists.ops;
+    return Array.isArray(ops) && (ops.some((op) => uuidKey(op.uuid) === uuidKey(row.uuid)) || !!namedRow(ops, row.name));
+  }
+  function selectedWhitelistPlayer() {
+    const selected = opPicker.selected;
+    if (!selected || ui("name").value !== selected.name || !Array.isArray(state.lists.whitelist)) return null;
+    return state.lists.whitelist.find((row) => uuidKey(row.uuid) === uuidKey(selected.uuid) && row.name === selected.name && !alreadyOp(row)) || null;
+  }
+  function resetOpPicker() { opPicker.open = false; opPicker.active = -1; opPicker.selected = null; opPicker.matches = []; }
+  function renderOpPicker() {
+    const input = ui("name");
+    const list = ui("op-candidates");
+    const restricted = restrictedOpPicker();
+    const enabled = whitelistEnabled();
+    const editable = canEdit(state.tab) && (state.tab !== "ops" || (enabled !== null && (enabled === false || Array.isArray(state.lists.whitelist))));
+    input.disabled = !editable;
+    input.placeholder = state.tab !== "ops" || enabled === false ? "玩家名，例如 Steve" : enabled === null ? "请先刷新白名单状态" : !Array.isArray(state.lists.whitelist) ? "请先刷新白名单" : "搜索并选择白名单玩家";
+    ui("add-button").disabled = !editable || (restricted && !selectedWhitelistPlayer());
+    list.replaceChildren();
+    input.removeAttribute("aria-activedescendant");
+    if (restricted) {
+      input.setAttribute("role", "combobox");
+      input.setAttribute("aria-autocomplete", "list");
+      input.setAttribute("aria-controls", list.id);
+      input.setAttribute("aria-expanded", "false");
+    } else {
+      ["role", "aria-autocomplete", "aria-controls", "aria-expanded"].forEach((name) => input.removeAttribute(name));
+    }
+    if (!restricted || !editable || !opPicker.open) { list.hidden = true; opPicker.active = -1; return; }
+    const query = input.value.trim().toLowerCase();
+    opPicker.matches = state.lists.whitelist.filter((row) => NAME.test(row.name) && row.name.toLowerCase().includes(query)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 50);
+    if (!opPicker.matches[opPicker.active] || alreadyOp(opPicker.matches[opPicker.active])) opPicker.active = opPicker.matches.findIndex((row) => !alreadyOp(row));
+    opPicker.matches.forEach((row, index) => {
+      const option = document.createElement("button");
+      option.type = "button"; option.className = "ac-candidate"; option.tabIndex = -1;
+      option.id = list.id + "-" + index;
+      option.setAttribute("role", "option"); option.setAttribute("aria-label", row.name + (alreadyOp(row) ? "，已是 OP" : ""));
+      option.setAttribute("aria-selected", String(index === opPicker.active));
+      option.disabled = alreadyOp(row); option.setAttribute("aria-disabled", String(option.disabled));
+      option.dataset.action = "select-op-player"; option.dataset.index = String(index);
+      const name = document.createElement("span"); name.className = "ac-candidate-name"; name.textContent = row.name;
+      option.append(playerAvatar(row), name);
+      if (option.disabled) {
+        const tag = document.createElement("span"); tag.className = "ac-candidate-tag"; tag.textContent = "已是 OP"; option.appendChild(tag);
+      }
+      list.appendChild(option);
+      if (index === opPicker.active) input.setAttribute("aria-activedescendant", option.id);
+    });
+    if (!opPicker.matches.length) {
+      const empty = document.createElement("div"); empty.className = "ac-candidate-note";
+      empty.textContent = state.lists.whitelist.length ? "没有匹配的白名单玩家" : "白名单为空，请先添加玩家";
+      list.appendChild(empty);
+    }
+    list.hidden = false; input.setAttribute("aria-expanded", "true");
+  }
+  function selectOpPlayer(index) {
+    const row = opPicker.matches[index];
+    if (!restrictedOpPicker() || !row || alreadyOp(row)) return;
+    opPicker.selected = { name: row.name, uuid: row.uuid };
+    ui("name").value = row.name;
+    opPicker.open = false; renderOpPicker();
+  }
+  function nameInput() { opPicker.selected = null; opPicker.active = -1; opPicker.open = restrictedOpPicker(); renderOpPicker(); }
+  function nameFocus() { if (restrictedOpPicker()) { opPicker.open = true; renderOpPicker(); } }
+  function nameBlur() { opPicker.open = false; renderOpPicker(); }
+  function pickerPointerDown(event) {
+    const option = event.target.closest && event.target.closest('[data-action="select-op-player"]');
+    if (option && root.contains(option)) event.preventDefault();
+  }
+  function nameKeyDown(event) {
+    if (!restrictedOpPicker() || ui("name").disabled || event.isComposing) return;
+    if (event.key === "Escape" && opPicker.open) { event.preventDefault(); opPicker.open = false; renderOpPicker(); }
+    if (event.key === "Enter" && opPicker.open) { event.preventDefault(); selectOpPlayer(opPicker.active); }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const wasOpen = opPicker.open;
+    opPicker.open = true; renderOpPicker();
+    const choices = opPicker.matches.map((row, index) => alreadyOp(row) ? -1 : index).filter((index) => index >= 0);
+    if (!choices.length) return;
+    const position = choices.indexOf(opPicker.active);
+    opPicker.active = !wasOpen ? (event.key === "ArrowDown" ? choices[0] : choices[choices.length - 1]) : choices[(position + (event.key === "ArrowDown" ? 1 : choices.length - 1)) % choices.length];
+    renderOpPicker();
+    const active = document.getElementById(ui("name").getAttribute("aria-activedescendant"));
+    if (active) active.scrollIntoView({ block: "nearest" });
+  }
   function renderNotice() {
     ui("notice").textContent = state.notice;
     ui("notice").setAttribute("data-tone", state.tone);
@@ -430,8 +530,7 @@
     ui("reason-field").hidden = state.tab !== "bans";
     ui("reason").disabled = state.tab !== "bans" || !canEdit("bans");
     ui("search").placeholder = state.tab === "bans" ? "搜索玩家名 / UUID / 原因" : "搜索玩家名 / UUID";
-    ui("add-button").disabled = !canEdit(state.tab);
-    ui("name").disabled = !canEdit(state.tab);
+    renderOpPicker();
     ui("directory").disabled = state.busy || !context || !bridgeAvailable;
     ui("path-button").disabled = state.busy || !context || !bridgeAvailable;
     const stamp = state.lastRead ? "已同步 " + state.lastRead.toLocaleTimeString("zh-CN", { hour12: false }) : context ? "连接中…" : "未连接实例";
@@ -440,6 +539,7 @@
   }
   async function refresh(context) {
     if (!current(context) || state.busy) return;
+    resetOpPicker();
     failedAvatars.clear();
     avatarProviders.clear();
     state.busy = true;
@@ -464,6 +564,28 @@
       else message("");
     } catch (error) { if (current(context) && !isCancelled(error)) message(errorMessage(error), "error"); }
     finally { if (current(context)) { state.busy = false; render(); } }
+  }
+  async function checkOpGrant(context, action) {
+    // Re-read the rule and membership for this submission, not just the picker snapshot.
+    state.properties = null;
+    try { state.properties = await readProperties(context); delete state.errors.properties; }
+    catch (error) { if (!isCancelled(error)) state.errors.properties = errorMessage(error); throw error; }
+    const enabled = whitelistEnabled();
+    if (enabled === null) throw new Error("无法确认白名单状态，暂不能授予 OP。请刷新后重试。");
+    if (!enabled) return null;
+    state.lists.whitelist = null;
+    try { state.lists.whitelist = await readList(context, "whitelist"); delete state.errors.whitelist; }
+    catch (error) { if (!isCancelled(error)) state.errors.whitelist = errorMessage(error); throw error; }
+    const choice = action.whitelistPlayer;
+    if (!choice || !uuidKey(choice.uuid) || action.name !== choice.name) throw new Error("白名单已开启，请从白名单候选中选择玩家。");
+    const member = state.lists.whitelist.find((row) => uuidKey(row.uuid) === uuidKey(choice.uuid));
+    if (!member || member.name !== choice.name) {
+      opPicker.selected = null;
+      throw new Error("该玩家已不在白名单中或身份已变化，请重新选择。");
+    }
+    if (state.lists.whitelist.some((row) => row.name.toLowerCase() === member.name.toLowerCase() && uuidKey(row.uuid) !== uuidKey(member.uuid))) throw new Error("白名单存在同名但不同 UUID 的玩家，请先核对身份。");
+    action.name = member.name;
+    return member;
   }
   async function mutate(action) {
     const context = state.context;
@@ -497,8 +619,9 @@
           // Server-side name/UUID resolution is authoritative. Preserve typed case.
           const existing = namedRow(rows.filter((row) => action.kind !== "bans" || banActive(row)), action.name);
           if (existing) { message(action.name + " 已在" + LABELS[action.kind] + "中。", "success"); return; }
+          const opMember = action.kind === "ops" ? await checkOpGrant(context, action) : null;
           command = action.kind === "ops" ? "op " + action.name : action.kind === "bans" ? "ban " + action.name + (action.reason ? " " + action.reason : "") : "whitelist add " + action.name;
-          verify = () => Boolean(namedRow(state.lists[action.kind].filter((row) => action.kind !== "bans" || banActive(row)), action.name));
+          verify = () => opMember ? state.lists.ops.some((row) => uuidKey(row.uuid) === uuidKey(opMember.uuid) && row.name === opMember.name) : Boolean(namedRow(state.lists[action.kind].filter((row) => action.kind !== "bans" || banActive(row)), action.name));
         } else {
           const key = uuidKey(action.uuid);
           if (!key) throw new Error("此条目缺少有效 UUID，无法确认移除结果。");
@@ -527,7 +650,7 @@
         delete state.errors[action.kind];
         const result = action.kind === "properties" ? (action.enabled ? "已开启白名单。" : "已关闭白名单。") : action.kind === "ops" ? (action.add ? "已授予 " : "已撤销 ") + action.name + " 的 OP 权限。" : action.kind === "bans" ? (action.add ? "已封禁 " : "已解封 ") + action.name + "。" : action.name + (action.add ? " 已加入白名单。" : " 已移出白名单。");
         message(result, "success");
-        if (action.add) ui("name").value = "";
+        if (action.add) { ui("name").value = ""; resetOpPicker(); }
         if (action.add && action.kind === "bans") ui("reason").value = "";
       } else message("命令已发送，但尚未确认目标状态。请查看当前实例控制台，检查玩家名、身份解析或命令报错，再刷新名单。", "warning");
     } catch (error) {
@@ -542,6 +665,7 @@
   }
   function enterContext(route, directory) {
     cancelPending(); state.generation += 1;
+    resetOpPicker();
     state.busy = false; state.instance = null; state.lists = emptyLists(); state.properties = null; state.errors = {}; state.lastRead = null;
     ui("name").value = ""; ui("search").value = ""; ui("reason").value = "";
     if (!route) { state.context = null; message("请进入某个 MC 实例的控制台页面，再使用这张卡片。"); render(); return; }
@@ -559,6 +683,7 @@
     const button = event.target.closest && event.target.closest("button[data-action]");
     if (!button || !root.contains(button) || button.disabled) return;
     const action = button.dataset.action;
+    if (action === "select-op-player") selectOpPlayer(Number(button.dataset.index));
     if (action === "search") {
       const open = ui("search-field").hidden;
       ui("search-field").hidden = !open;
@@ -571,7 +696,7 @@
       button.setAttribute("aria-expanded", String(!ui("help").hidden));
     }
     if (action === "refresh") refresh(state.context);
-    if (action.startsWith("tab-") && KINDS.includes(action.slice(4))) { state.tab = action.slice(4); ui("search").value = ""; render(); }
+    if (action.startsWith("tab-") && KINDS.includes(action.slice(4))) { resetOpPicker(); state.tab = action.slice(4); ui("search").value = ""; render(); }
     if (action === "remove") mutate({ kind: button.dataset.kind, name: button.dataset.name, uuid: button.dataset.uuid, add: false });
     if (action === "toggle-whitelist") { const before = whitelistEnabled(); if (before !== null) mutate({ kind: "properties", enabled: !before }); }
   }
@@ -579,6 +704,7 @@
     const tab = event.target.closest && event.target.closest('[role="tab"]');
     if (!tab || !root.contains(tab) || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
+    resetOpPicker();
     state.tab = event.key === "Home" ? KINDS[0] : event.key === "End" ? KINDS[KINDS.length - 1] : KINDS[(KINDS.indexOf(state.tab) + (event.key === "ArrowRight" ? 1 : KINDS.length - 1)) % KINDS.length];
     ui("search").value = "";
     render(); buttons("tab-" + state.tab).focus();
@@ -591,7 +717,15 @@
     const dark = host ? host.classList.contains("app-dark-theme") : theme === "2" || theme === "dark" || ((theme === "0" || theme === "auto") && colorScheme && colorScheme.matches);
     root.setAttribute("data-theme", dark ? "dark" : "light");
   }
-  function addSubmit(event) { event.preventDefault(); if (canEdit(state.tab)) mutate({ kind: state.tab, name: ui("name").value, reason: ui("reason").value, add: true }); }
+  function addSubmit(event) {
+    event.preventDefault();
+    if (!canEdit(state.tab)) return;
+    if (restrictedOpPicker() && !selectedWhitelistPlayer()) {
+      message("请从白名单候选中选择玩家。", "warning");
+      opPicker.open = true; ui("name").focus(); renderOpPicker(); return;
+    }
+    mutate({ kind: state.tab, name: ui("name").value, reason: ui("reason").value, whitelistPlayer: state.tab === "ops" && opPicker.selected ? Object.assign({}, opPicker.selected) : null, add: true });
+  }
   function pathSubmit(event) {
     event.preventDefault(); if (state.busy || !state.context) return;
     try {
@@ -608,6 +742,11 @@
     if (colorScheme && colorScheme.removeEventListener) colorScheme.removeEventListener("change", syncTheme);
     root.removeEventListener("click", handleClick);
     root.removeEventListener("keydown", handleTabKey);
+    root.removeEventListener("pointerdown", pickerPointerDown);
+    ui("name").removeEventListener("input", nameInput);
+    ui("name").removeEventListener("focus", nameFocus);
+    ui("name").removeEventListener("blur", nameBlur);
+    ui("name").removeEventListener("keydown", nameKeyDown);
     ui("show-uuid").removeEventListener("change", showUuid);
     ui("add-form").removeEventListener("submit", addSubmit);
     ui("path-form").removeEventListener("submit", pathSubmit);
@@ -624,6 +763,9 @@
       for (let parent = root.parentElement; parent; parent = parent.parentElement) themeObserver.observe(parent, { attributes: true, attributeFilter: ["class"] });
     }
     const id = "mcsm-access-" + Math.random().toString(36).slice(2, 10);
+    ui("name").id = id + "-name";
+    ui("name-label").htmlFor = ui("name").id;
+    ui("op-candidates").id = id + "-candidates";
     ui("list-panel").id = id + "-list";
     ui("help").id = id + "-settings";
     ui("search-field").id = id + "-search";
@@ -635,6 +777,11 @@
     });
     root.addEventListener("click", handleClick);
     root.addEventListener("keydown", handleTabKey);
+    root.addEventListener("pointerdown", pickerPointerDown);
+    ui("name").addEventListener("input", nameInput);
+    ui("name").addEventListener("focus", nameFocus);
+    ui("name").addEventListener("blur", nameBlur);
+    ui("name").addEventListener("keydown", nameKeyDown);
     ui("show-uuid").addEventListener("change", showUuid);
     ui("add-form").addEventListener("submit", addSubmit);
     ui("path-form").addEventListener("submit", pathSubmit);
